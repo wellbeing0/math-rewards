@@ -103,12 +103,13 @@ h3 {
 
 .status-strip {
   display: grid;
-  grid-template-columns: repeat(3, minmax(74px, 1fr)) auto;
+  grid-template-columns: repeat(3, minmax(74px, 1fr)) repeat(2, auto);
   gap: 8px;
   align-items: stretch;
 }
 
 .stat,
+.demo-link,
 .settings-button {
   min-height: 58px;
   border: 2px solid #d8dfcf;
@@ -132,6 +133,7 @@ h3 {
   font-weight: 700;
 }
 
+.demo-link,
 .settings-button,
 .secondary-action,
 .primary-action,
@@ -140,6 +142,15 @@ h3 {
   min-height: 52px;
   border-radius: 8px;
   font-weight: 800;
+}
+
+.demo-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #1d352d;
+  text-decoration: none;
+  white-space: nowrap;
 }
 
 .settings-button,

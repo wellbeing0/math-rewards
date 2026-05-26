@@ -90,12 +90,19 @@ function createShell(): HTMLElement {
   status.append(stat(String(save.completedSessions), "sessions"));
   status.append(stat(String(save.bestStreak), "best streak"));
 
+  const demoLink = document.createElement("a");
+  demoLink.className = "demo-link";
+  demoLink.href = "./rewards/math-to-reveal-oss-demo.mp4";
+  demoLink.textContent = "Demo video";
+  demoLink.setAttribute("aria-label", "Play demo video");
+
   const settingsButton = buttonEl("Settings", "settings-button");
   settingsButton.setAttribute("aria-label", "Open adult settings");
   settingsButton.addEventListener("click", () => {
     settingsOpen = true;
     render();
   });
+  status.append(demoLink);
   status.append(settingsButton);
   topbar.append(title, status);
 
