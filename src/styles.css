@@ -348,8 +348,26 @@ h3 {
   align-items: center;
 }
 
-.question-row.has-help {
+.question-row.has-help,
+.question-row.has-actions {
   grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.question-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.question-actions .secondary-action {
+  flex: 0 0 auto;
+}
+
+.workbench-action {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
 }
 
 .question {
@@ -1097,6 +1115,14 @@ h3 {
 
   .question-row {
     grid-template-columns: 1fr;
+  }
+
+  .question-actions {
+    justify-content: stretch;
+  }
+
+  .question-actions .secondary-action {
+    flex: 1 1 150px;
   }
 
   .answer-choice {

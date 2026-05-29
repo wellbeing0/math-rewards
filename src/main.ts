@@ -5,6 +5,7 @@ import {
   type AnswerValue,
   type MathPrompt,
   type MathSettings,
+  type PartModel,
   type GradeLane,
   type Operation,
   type PathId
@@ -30,6 +31,7 @@ const appRoot = app;
 
 const CORRECT_FEEDBACK = ["Nice math.", "You found it.", "That works.", "Good thinking.", "Path cleared."];
 const NUDGE_FEEDBACK = ["Try that one again.", "Look closely and try again.", "Almost. Count it one more time.", "Check the numbers again."];
+const WORKBENCH_HANDOFF_BASE_URL = workbenchHandoffBaseUrl();
 const GRADE_CHOICES: Array<[GradeLane, string]> = [
   ["kindergarten", "Kindergarten"],
   ["grade1", "First grade"],
@@ -56,6 +58,8 @@ let viewedRewardMediaId: string | null = null;
 let rewardMediaMessage = "";
 let activeTeachingAid: { aid: TeachingAid; stepIndex: number; preview: boolean } | null = null;
 let teachingAidMessage = "";
+
+restoreHandoffReturn();
 
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
@@ -159,7 +163,8 @@ function createLauncher(): HTMLElement {
 
 function createPlayView(current: SessionState): HTMLElement {
   const prompt = current.currentPrompt;
-  const teachingAid = teachingAidForPrompt(prompt, save.settings);
+  const workbenchUrl = current.path === "mix" ? null : workbenchHandoffUrlForPrompt(prompt, current.path);
+  const teachingAid = workbenchUrl ? null : teachingAidForPrompt(prompt, save.settings);
   const wrapper = el("article", "practice-card");
   const progress = el("div", "session-progress");
   progress.append(el("span", "", "Solved " + String(current.correct) + " of " + String(save.settings.sessionLength)));
@@ -175,11 +180,24 @@ function createPlayView(current: SessionState): HTMLElement {
   promptPanel.append(el("p", "path-label", pathLabel(current.path)));
   const questionRow = el("div", "question-row");
   questionRow.append(el("div", "question", prompt.question));
+  const questionActions = el("div", "question-actions");
   if (teachingAid) {
-    questionRow.classList.add("has-help");
     const helpButton = buttonEl(teachingAid.buttonLabel, "secondary-action help-action");
     helpButton.addEventListener("click", () => openTeachingAid(teachingAid, 0));
-    questionRow.append(helpButton);
+    questionActions.append(helpButton);
+  }
+  if (workbenchUrl) {
+    const workbenchLink = el("a", "secondary-action help-action workbench-action", "Open workbench");
+    workbenchLink.href = workbenchUrl;
+    workbenchLink.setAttribute("aria-label", "Open workbench model for this prompt");
+    questionActions.append(workbenchLink);
+  }
+  if (questionActions.childElementCount > 0) {
+    questionRow.classList.add("has-actions");
+    if (teachingAid) {
+      questionRow.classList.add("has-help");
+    }
+    questionRow.append(questionActions);
   }
   promptPanel.append(questionRow);
   if (teachingAid && !save.settings.seenTeachingAidIds.includes(teachingAid.id)) {
@@ -1172,6 +1190,154 @@ function operationLabel(operation: Operation): string {
     return "Fractions";
   }
   return "Decimals";
+}
+
+function workbenchHandoffBaseUrl(): string {
+  const env = (import.meta as ImportMeta & { env?: { VITE_WORKBENCH_HANDOFF_URL?: string } }).env;
+  return env?.VITE_WORKBENCH_HANDOFF_URL?.trim() ?? "";
+}
+
+function workbenchHandoffUrlForPrompt(prompt: MathPrompt, path: PathId): string | null {
+  if (!WORKBENCH_HANDOFF_BASE_URL) {
+    return null;
+  }
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const url = new URL(WORKBENCH_HANDOFF_BASE_URL, window.location.origin);
+  url.searchParams.set("handoff", "1");
+  url.searchParams.set("question", prompt.question);
+  url.searchParams.set("returnTo", handoffReturnUrl(path));
+
+  if (prompt.visualArray) {
+    url.searchParams.set("mode", "multiply");
+    url.searchParams.set("rows", String(prompt.visualArray.rows));
+    url.searchParams.set("columns", String(prompt.visualArray.columns));
+    return url.href;
+  }
+
+  if (prompt.visualGroups?.length) {
+    const groupSize = prompt.visualGroups[0] ?? 0;
+    const equalGroups = prompt.visualGroups.every((size) => size === groupSize);
+    if (groupSize > 0 && equalGroups) {
+      url.searchParams.set("mode", "multiply");
+      url.searchParams.set("rows", String(prompt.visualGroups.length));
+      url.searchParams.set("columns", String(groupSize));
+      return url.href;
+    }
+  }
+
+  if (prompt.operation === "multiply" && prompt.metadata.left && prompt.metadata.right) {
+    url.searchParams.set("mode", "multiply");
+    url.searchParams.set("rows", String(prompt.metadata.left));
+    url.searchParams.set("columns", String(prompt.metadata.right));
+    return url.href;
+  }
+
+  if (prompt.operation === "divide" && prompt.metadata.left && prompt.metadata.right) {
+    url.searchParams.set("mode", "divide");
+    url.searchParams.set("total", String(prompt.metadata.left));
+    url.searchParams.set("groups", String(prompt.metadata.right));
+    return url.href;
+  }
+
+  const compareModels = prompt.visualCompare
+    ? [prompt.visualCompare.left, prompt.visualCompare.right]
+    : prompt.visualEquivalent?.models ?? null;
+  if (compareModels) {
+    url.searchParams.set("mode", "compare");
+    appendWorkbenchComparePart(url, "a", compareModels[0]);
+    appendWorkbenchComparePart(url, "b", compareModels[1]);
+    return url.href;
+  }
+
+  if (prompt.visualPart?.kind === "fraction") {
+    url.searchParams.set("mode", "fraction");
+    url.searchParams.set("numerator", String(prompt.visualPart.colored));
+    url.searchParams.set("denominator", String(prompt.visualPart.total));
+    return url.href;
+  }
+
+  if (prompt.visualPart?.kind === "decimal") {
+    url.searchParams.set("mode", "decimal");
+    url.searchParams.set("hundredths", String(partAsHundredths(prompt.visualPart)));
+    return url.href;
+  }
+
+  return null;
+}
+
+function handoffReturnUrl(path: PathId): string {
+  const url = new URL(window.location.href);
+  url.searchParams.set("resumePath", path);
+  return url.pathname + url.search + url.hash;
+}
+
+function restoreHandoffReturn(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const params = new URLSearchParams(window.location.search);
+  const resumePath = parsePathId(params.get("resumePath"));
+  if (!resumePath) {
+    return;
+  }
+  const savedProgress = getSavedPathProgress(resumePath);
+  if (savedProgress) {
+    session = createSessionState({
+      path: resumePath,
+      settings: save.settings,
+      seed: savedProgress.seed,
+      savedProgress
+    });
+    screen = "play";
+    feedback = "Back from the workbench.";
+  }
+  params.delete("resumePath");
+  const cleanSearch = params.toString();
+  const nextUrl = window.location.pathname + (cleanSearch ? "?" + cleanSearch : "") + window.location.hash;
+  window.history.replaceState(null, "", nextUrl);
+}
+
+function parsePathId(value: string | null): PathId | null {
+  const paths: PathId[] = ["count", "add", "subtract", "placeValue", "skipCount", "groups", "times", "divide", "arrays", "fractions", "decimals", "mix"];
+  return value && paths.includes(value as PathId) ? value as PathId : null;
+}
+
+function appendWorkbenchComparePart(url: URL, prefix: "a" | "b", part: PartModel): void {
+  const label = part.label ?? partModelLabel(part);
+  url.searchParams.set(prefix + "Kind", part.kind);
+  url.searchParams.set(prefix + "Label", label);
+  if (part.kind === "fraction") {
+    url.searchParams.set(prefix + "Numerator", String(part.colored));
+    url.searchParams.set(prefix + "Denominator", String(part.total));
+    return;
+  }
+  url.searchParams.set(prefix + "Hundredths", String(partAsHundredths(part)));
+}
+
+function partAsHundredths(part: PartModel): number {
+  if (part.total === 100) {
+    return part.colored;
+  }
+  if (part.total === 10) {
+    return part.colored * 10;
+  }
+  return Math.max(0, Math.min(100, Math.round((part.colored / part.total) * 100)));
+}
+
+function partModelLabel(part: PartModel): string {
+  if (part.kind === "fraction") {
+    return String(part.colored) + "/" + String(part.total);
+  }
+  if (part.total === 10) {
+    return "0." + String(part.colored);
+  }
+  if (part.total === 100) {
+    return "0." + String(part.colored).padStart(2, "0");
+  }
+  return (part.colored / part.total).toFixed(2);
 }
 
 function pathLabel(path: PathId): string {

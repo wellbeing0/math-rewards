@@ -9,6 +9,7 @@ Math to Reveal is a browser-first elementary math practice game. Children solve 
 - Adult-controlled grade lanes and operations.
 - Touch-friendly choices and numeric keypad input.
 - Visual fraction and decimal models.
+- Optional workbench handoff link for deployments that provide a compatible manipulative workbench URL.
 - Local-only progress in browser storage.
 - Static build with no backend, accounts, telemetry, or runtime API keys.
 
@@ -32,6 +33,8 @@ Use Node 20.19 or newer. The project is tested with Node 24.
 Run a local dev server:
 
     npm run dev
+
+To enable the optional workbench handoff control in a build, set `VITE_WORKBENCH_HANDOFF_URL` to a same-origin or absolute URL that accepts Math to Reveal handoff query parameters.
 
 ## Static Hosting
 
