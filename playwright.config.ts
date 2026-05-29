@@ -7,7 +7,7 @@ export default defineConfig({
     timeout: 5_000
   },
   webServer: {
-    command: "npm run dev",
+    command: "VITE_WORKBENCH_HANDOFF_URL=/workbench/ npm run dev",
     url: "http://127.0.0.1:5173",
     reuseExistingServer: !process.env.CI,
     stdout: "pipe",

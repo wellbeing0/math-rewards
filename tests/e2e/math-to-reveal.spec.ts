@@ -154,6 +154,19 @@ async function setGradeSession(page: Page, gradeLane: "grade2" | "grade3" | "gra
   }, { key: saveKey, grade: gradeLane, operations: enabledOperations, extraSettings: extra });
 }
 
+async function expectNoHorizontalOverflow(page: Page): Promise<void> {
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(overflow).toBeLessThanOrEqual(1);
+}
+
+async function expectControlsOnOneLine(page: Page, selector: string): Promise<void> {
+  const rows = await page.locator(selector).evaluate((container) => {
+    const tops = Array.from(container.children).map((child) => Math.round(child.getBoundingClientRect().top));
+    return new Set(tops).size;
+  });
+  expect(rows).toBe(1);
+}
+
 test("child can complete a short addition session and reveal video pieces", async ({ page }) => {
   await setShortSession(page);
   await page.goto("/");
@@ -218,9 +231,10 @@ test("teaching aid opens one step at a time without reducing prompt credit", asy
   await page.goto("/");
   await page.getByRole("button", { name: /Add/ }).tap();
 
-  await expect(page.getByText("New idea: Add by making a picture")).toBeVisible();
+  await expect(page.getByText("New idea: Add by making a picture")).toHaveCount(0);
   const activeQuestion = ((await page.locator(".question").textContent()) ?? "").trim();
   const activeAddends = activeQuestion.match(/(\d+)\s*\+\s*(\d+)/);
+  await expect(page.locator(".question-actions .math-command-text")).toHaveText("Think");
   await page.getByRole("button", { name: "Show a way" }).tap();
   await expect(page.getByRole("region", { name: "Add by making a picture" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Understand" })).toBeVisible();
@@ -245,7 +259,7 @@ test("repeated misses offer the matching teaching aid", async ({ page }) => {
   await setShortSession(page, { attemptsToReward: 2 });
   await page.goto("/");
   await page.getByRole("button", { name: /Subtract/ }).tap();
-  await page.getByRole("button", { name: "Skip" }).tap();
+  await expect(page.getByText("New idea: Subtract by taking away")).toHaveCount(0);
 
   await answerCurrentPrompt(page, false);
   await answerCurrentPrompt(page, false);
@@ -582,4 +596,21 @@ test("phone layout keeps play controls before the reward panel", async ({ page }
   expect(reward).not.toBeNull();
   expect((answers?.y ?? 0)).toBeGreaterThan((prompt?.y ?? 0) + (prompt?.height ?? 0) - 1);
   expect((reward?.y ?? 0)).toBeGreaterThan((answers?.y ?? 0) + (answers?.height ?? 0) - 1);
+});
+
+test("phone command rows stay icon-labeled, closed, and on one line", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "phone", "Phone command-row check only runs in phone project.");
+  await setGradeSession(page, "grade4", ["fraction", "decimal"], {
+    sessionLength: 4,
+    fractionModes: ["name", "match", "compare"],
+    decimalModes: ["name", "match", "compare"]
+  });
+  await page.goto("/");
+
+  await page.getByRole("button", { name: /Fractions/ }).tap();
+  await expect(page.locator(".teaching-aid-offer")).toHaveCount(0);
+  await expect(page.locator(".question-actions .math-command-icon")).toHaveCount(1);
+  await expect(page.locator(".question-actions .math-command-text")).toHaveText("Workbench");
+  await expectControlsOnOneLine(page, ".question-actions");
+  await expectNoHorizontalOverflow(page);
 });

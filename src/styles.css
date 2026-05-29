@@ -165,6 +165,47 @@ h3 {
   color: #ffffff;
 }
 
+.math-command {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+.math-command-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.math-command-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+}
+
+.math-command-icon svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.math-command-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .danger-action {
   background: #8c2f39;
   color: #ffffff;
@@ -354,19 +395,22 @@ h3 {
 }
 
 .question-actions {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(var(--math-command-count, 1), minmax(44px, 1fr));
   gap: 8px;
-  justify-content: flex-end;
+  justify-self: end;
+  width: min(100%, calc(var(--math-command-count, 1) * 154px));
 }
 
 .question-actions .secondary-action {
-  flex: 0 0 auto;
+  min-width: 0;
+  padding: 0 10px;
 }
 
 .workbench-action {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   text-decoration: none;
 }
 
@@ -629,6 +673,10 @@ h3 {
 
 .feedback-panel p {
   margin: 0;
+}
+
+.feedback-panel .tiny-action {
+  margin-top: 10px;
 }
 
 .teaching-aid-offer {
@@ -1118,11 +1166,21 @@ h3 {
   }
 
   .question-actions {
-    justify-content: stretch;
+    justify-self: stretch;
+    width: 100%;
   }
 
   .question-actions .secondary-action {
-    flex: 1 1 150px;
+    padding: 0 6px;
+  }
+
+  .math-command-label {
+    gap: 4px;
+  }
+
+  .math-command-icon {
+    width: 18px;
+    height: 18px;
   }
 
   .answer-choice {

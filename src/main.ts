@@ -20,6 +20,7 @@ import { bestSavedPathProgress, createSessionState, evaluateAnswer, markHelpUsed
 import { teachingAidForContext, teachingAidForPrompt, teachingAidStepMedia, TEACHING_AIDS, type TeachingAid, type TeachingAidMedia } from "./teachingAids";
 import { playTeachingAidStepAudio } from "./teachingAidAudio";
 import { createArrayGrid, createCompareVisual, createEquivalentVisual, createFractionVisual, createGemGrid, createGroupGrid, createOperationVisual, createPartVisual } from "./views/mathVisuals";
+import { commandIconSvg, type CommandIcon } from "../shared/commandIcons";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 
@@ -41,7 +42,6 @@ const GRADE_CHOICES: Array<[GradeLane, string]> = [
 ];
 
 type Screen = "launcher" | "play" | "summary";
-
 let persistenceWarning = !canUseStorage(window.localStorage);
 let save: MathSave = loadSave(window.localStorage);
 let saveLoadStatus: SaveLoadStatus = getLastLoadSaveStatus();
@@ -100,12 +100,12 @@ function createShell(): HTMLElement {
   status.append(stat(String(save.bestStreak), "best streak"));
 
   const demoLink = document.createElement("a");
-  demoLink.className = "demo-link";
+  demoLink.className = "demo-link math-command";
   demoLink.href = "./rewards/math-to-reveal-oss-demo.mp4";
-  demoLink.textContent = "Demo video";
+  demoLink.append(commandLabel("video", "Demo"));
   demoLink.setAttribute("aria-label", "Play demo video");
 
-  const settingsButton = buttonEl("Settings", "settings-button");
+  const settingsButton = commandButton("Settings", "settings-button", "settings");
   settingsButton.setAttribute("aria-label", "Open adult settings");
   settingsButton.addEventListener("click", () => {
     settingsOpen = true;
@@ -171,7 +171,7 @@ function createPlayView(current: SessionState): HTMLElement {
   const bar = el("div", "progress-bar");
   bar.append(el("span", ""));
   bar.style.setProperty("--progress", String(current.correct / save.settings.sessionLength));
-  const choosePath = buttonEl("Choose path", "secondary-action choose-path-action");
+  const choosePath = commandButton("Path", "secondary-action choose-path-action", "path", "Choose path");
   choosePath.addEventListener("click", returnToLauncher);
   progress.append(bar);
   progress.append(choosePath);
@@ -182,17 +182,20 @@ function createPlayView(current: SessionState): HTMLElement {
   questionRow.append(el("div", "question", prompt.question));
   const questionActions = el("div", "question-actions");
   if (teachingAid) {
-    const helpButton = buttonEl(teachingAid.buttonLabel, "secondary-action help-action");
+    const helpButton = commandButton(current.promptAttempts >= 2 ? "Clue" : "Think", "secondary-action help-action", "brain", teachingAid.buttonLabel);
+    helpButton.classList.toggle("is-suggested", current.promptAttempts >= 2);
     helpButton.addEventListener("click", () => openTeachingAid(teachingAid, 0));
     questionActions.append(helpButton);
   }
   if (workbenchUrl) {
-    const workbenchLink = el("a", "secondary-action help-action workbench-action", "Open workbench");
+    const workbenchLink = el("a", "secondary-action help-action workbench-action math-command");
     workbenchLink.href = workbenchUrl;
     workbenchLink.setAttribute("aria-label", "Open workbench model for this prompt");
+    workbenchLink.append(commandLabel("workbench", "Workbench"));
     questionActions.append(workbenchLink);
   }
   if (questionActions.childElementCount > 0) {
+    setCommandCount(questionActions);
     questionRow.classList.add("has-actions");
     if (teachingAid) {
       questionRow.classList.add("has-help");
@@ -200,16 +203,6 @@ function createPlayView(current: SessionState): HTMLElement {
     questionRow.append(questionActions);
   }
   promptPanel.append(questionRow);
-  if (teachingAid && !save.settings.seenTeachingAidIds.includes(teachingAid.id)) {
-    const intro = el("section", "teaching-aid-offer");
-    intro.append(el("p", "", "New idea: " + teachingAid.title));
-    const open = buttonEl("Think with me", "secondary-action tiny-action");
-    open.addEventListener("click", () => openTeachingAid(teachingAid, 0));
-    const dismiss = buttonEl("Skip", "secondary-action tiny-action");
-    dismiss.addEventListener("click", () => acknowledgeTeachingAid(teachingAid.id));
-    intro.append(open, dismiss);
-    promptPanel.append(intro);
-  }
   if (prompt.visualCount) {
     promptPanel.append(createGemGrid(prompt.visualCount));
   }
@@ -242,7 +235,7 @@ function createPlayView(current: SessionState): HTMLElement {
   feedbackPanel.setAttribute("aria-atomic", "true");
   feedbackPanel.append(el("p", "", feedback));
   if (teachingAid && current.promptAttempts >= 2) {
-    const offer = buttonEl("Try a thinking step", "secondary-action tiny-action");
+    const offer = commandButton("Clue", "secondary-action tiny-action", "brain", "Try a thinking step");
     offer.addEventListener("click", () => openTeachingAid(teachingAid, 0));
     feedbackPanel.append(offer);
   }
@@ -259,15 +252,15 @@ function createSummaryView(current: SessionState): HTMLElement {
   wrapper.append(el("h2", "", "Video pieces revealed"));
   wrapper.append(el("p", "summary-score", String(current.correct) + " correct - " + String(current.mistakes) + " retries"));
   const actions = el("div", "summary-actions");
-  const replay = buttonEl("Replay path", "primary-action");
+  const replay = commandButton("Replay", "primary-action", "reset", "Replay path");
   replay.addEventListener("click", () => startSession(current.path));
-  const another = buttonEl("Choose path", "secondary-action");
+  const another = commandButton("Path", "secondary-action", "path", "Choose path");
   another.addEventListener("click", () => {
     screen = "launcher";
     feedback = "Pick a path to start.";
     render();
   });
-  const keepGoing = buttonEl("Keep going", "secondary-action");
+  const keepGoing = commandButton("Keep going", "secondary-action", "next");
   keepGoing.addEventListener("click", () => startSession("mix"));
   actions.append(replay, another, keepGoing);
   wrapper.append(actions);
@@ -339,7 +332,7 @@ function createSettingsSheet(): HTMLElement {
   const header = el("div", "settings-header");
   header.append(el("div", "", ""));
   header.firstElementChild?.append(el("p", "eyebrow", "Adult tools"), el("h2", "", "Math settings"));
-  const close = buttonEl("Close", "secondary-action");
+  const close = commandButton("Close", "secondary-action", "close");
   close.addEventListener("pointerdown", closeSettings);
   close.addEventListener("click", closeSettings);
   header.append(close);
@@ -418,7 +411,7 @@ function createSettingsSheet(): HTMLElement {
   });
   const motion = checkControl("Reduce motion", save.settings.reducedMotion, (checked) => updateSettings({ reducedMotion: checked }));
 
-  const reset = buttonEl("Reset math progress", "danger-action");
+  const reset = commandButton("Reset math progress", "danger-action", "reset");
   reset.addEventListener("click", () => {
     if (window.confirm("Reset Math to Reveal progress?")) {
       save = { ...DEFAULT_SAVE, settings: save.settings };
@@ -638,11 +631,11 @@ function createTeachingAidPanel(aid: TeachingAid, stepIndex: number, preview: bo
     panel.append(createTeachingAidMedia(media));
   }
   const actions = el("div", "summary-actions");
-  const close = buttonEl(preview ? "Back to settings" : "Back to problem", "secondary-action");
+  const close = commandButton(preview ? "Back to settings" : "Back to problem", "secondary-action", preview ? "settings" : "back");
   close.addEventListener("click", closeTeachingAid);
   actions.append(close);
   if (stepIndex + 1 < aid.steps.length) {
-    const next = buttonEl("Next step", "primary-action");
+    const next = commandButton("Next step", "primary-action", "next");
     next.addEventListener("click", () => {
       activeTeachingAid = { aid, stepIndex: stepIndex + 1, preview };
       void playActiveTeachingAidAudio();
@@ -740,7 +733,7 @@ function createRewardMediaTools(): HTMLElement {
     preview.alt = "";
     preview.loading = "lazy";
     const summary = el("span", "", media.title + " - " + mediaTypeLabel(media) + " - " + media.license + (hidden ? " - hidden" : ""));
-    const view = buttonEl("View", "secondary-action tiny-action");
+    const view = commandButton("View", "secondary-action tiny-action", "video");
     view.addEventListener("click", () => {
       viewedRewardMediaId = media.id;
       rewardMediaMessage = "Viewing " + media.title + ".";
@@ -748,7 +741,7 @@ function createRewardMediaTools(): HTMLElement {
     });
     row.append(preview, summary, view);
     if (isGiphyTheme) {
-      const hide = buttonEl("Hide", "danger-action tiny-action");
+      const hide = commandButton("Hide", "danger-action tiny-action", "hide");
       hide.disabled = hidden || visibleCount <= 1;
       hide.addEventListener("click", () => {
         if (!window.confirm("Hide " + media.title + " from this reward theme?")) {
@@ -769,7 +762,7 @@ function createRewardMediaTools(): HTMLElement {
       });
       row.append(hide);
       if (hidden) {
-        const restore = buttonEl("Restore", "secondary-action tiny-action");
+        const restore = commandButton("Restore", "secondary-action tiny-action", "restore");
         restore.addEventListener("click", () => {
           restoreRewardMedia(media.id);
           rewardMediaMessage = media.title + " restored.";
@@ -783,7 +776,7 @@ function createRewardMediaTools(): HTMLElement {
   section.append(list);
 
   if (isGiphyTheme) {
-    const restoreAll = buttonEl("Restore hidden GIFs", "secondary-action");
+    const restoreAll = commandButton("Restore hidden GIFs", "secondary-action", "restore");
     restoreAll.disabled = save.settings.hiddenRewardMediaIds.length === 0;
     restoreAll.addEventListener("click", () => {
       save = {
@@ -825,15 +818,15 @@ function createTeachingAidTools(): HTMLElement {
       el("span", "", aid.steps.map((step) => step.title).join(", "))
     );
     row.append(details);
-    const view = buttonEl("View", "secondary-action tiny-action");
+    const view = commandButton("View", "secondary-action tiny-action", "video");
     view.addEventListener("click", () => previewTeachingAid(aid));
     row.append(view);
     if (hidden) {
-      const restore = buttonEl("Restore", "secondary-action tiny-action");
+      const restore = commandButton("Restore", "secondary-action tiny-action", "restore");
       restore.addEventListener("click", () => restoreTeachingAid(aid.id));
       row.append(restore);
     } else {
-      const hide = buttonEl("Hide", "danger-action tiny-action");
+      const hide = commandButton("Hide", "danger-action tiny-action", "hide");
       hide.addEventListener("click", () => {
         if (!window.confirm("Hide " + aid.title + " teaching aid on this device?")) {
           return;
@@ -846,7 +839,7 @@ function createTeachingAidTools(): HTMLElement {
   }
   section.append(list);
 
-  const restoreAll = buttonEl("Restore hidden teaching aids", "secondary-action");
+  const restoreAll = commandButton("Restore hidden teaching aids", "secondary-action", "restore");
   restoreAll.disabled = save.settings.hiddenTeachingAidIds.length === 0;
   restoreAll.addEventListener("click", () => {
     save = {
@@ -930,7 +923,7 @@ function createRewardMediaViewer(media: RewardMedia): HTMLElement {
   const details = el("div", "reward-media-details");
   details.append(el("h4", "", media.title));
   details.append(el("p", "", mediaTypeLabel(media) + " - " + media.artist + " - " + media.license));
-  const close = buttonEl("Close", "secondary-action tiny-action");
+  const close = commandButton("Close", "secondary-action tiny-action", "close");
   close.addEventListener("click", () => {
     viewedRewardMediaId = null;
     rewardMediaMessage = "";
@@ -1112,7 +1105,7 @@ function createKeypad(current: SessionState): HTMLElement {
     button.addEventListener("click", () => updateKeypad(key));
     keys.append(button);
   }
-  const submit = buttonEl("Check", "primary-action keypad-submit");
+  const submit = commandButton("Check", "primary-action keypad-submit", "check");
   submit.disabled = current.keypadValue.length === 0;
   submit.addEventListener("click", submitKeypadAnswer);
   wrapper.append(display, keys, submit);
@@ -1618,6 +1611,31 @@ function buttonEl(text: string, className: string): HTMLButtonElement {
   button.className = className;
   button.textContent = text;
   return button;
+}
+
+function commandButton(label: string, className: string, icon: CommandIcon, ariaLabel = label): HTMLButtonElement {
+  const button = buttonEl("", className + " math-command");
+  button.setAttribute("aria-label", ariaLabel);
+  button.append(commandLabel(icon, label));
+  return button;
+}
+
+function commandLabel(icon: CommandIcon, label: string): HTMLElement {
+  const wrapper = el("span", "math-command-label");
+  wrapper.append(commandIcon(icon), el("span", "math-command-text", label));
+  return wrapper;
+}
+
+function commandIcon(icon: CommandIcon): HTMLElement {
+  const span = el("span", "math-command-icon");
+  span.setAttribute("aria-hidden", "true");
+  span.innerHTML = commandIconSvg(icon);
+  return span;
+}
+
+function setCommandCount(container: HTMLElement): void {
+  container.style.setProperty("--math-command-count", String(container.children.length));
+  container.classList.toggle("is-dense", container.children.length > 2);
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className = "", text = ""): HTMLElementTagNameMap[K] {
