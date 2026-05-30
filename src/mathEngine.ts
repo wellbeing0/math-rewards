@@ -217,19 +217,32 @@ function normalizeHiddenRewardMediaIds(value: unknown): string[] {
 }
 
 export function generatePrompt(request: PromptRequest): MathPrompt {
-  const recent = new Set(request.recentPromptIds ?? []);
+  const recentKeys = (request.recentPromptIds ?? []).map(promptRepeatKey);
+  const recent = new Set(recentKeys);
+  const lastRecent = recentKeys[recentKeys.length - 1];
   let prompt = generatePromptOnce(request, 0);
-  if (recent.size === 0 || !recent.has(prompt.id)) {
+  let fallback = promptRepeatKey(prompt.id) !== lastRecent ? prompt : null;
+  if (recent.size === 0 || !recent.has(promptRepeatKey(prompt.id))) {
     return prompt;
   }
 
   for (let offset = 1; offset <= 16; offset += 1) {
     prompt = generatePromptOnce(request, offset);
-    if (!recent.has(prompt.id)) {
+    const key = promptRepeatKey(prompt.id);
+    if (!recent.has(key)) {
       return prompt;
     }
+    if (!fallback && key !== lastRecent) {
+      fallback = prompt;
+    }
   }
-  return prompt;
+  return fallback ?? prompt;
+}
+
+function promptRepeatKey(id: string): string {
+  return id
+    .replace(/^(count|add|subtract|groups|multiply|divide|arrays)-\d+-/, "$1-")
+    .replace(/^(place-value|skip-count)-\d+-/, "$1-");
 }
 
 export function validateAnswer(prompt: MathPrompt, answer: AnswerValue): boolean {
@@ -1052,18 +1065,30 @@ function boundedSubtraction(random: RandomSource, maxAnswer: number): [number, n
 
 function twoDigitNoRegroupingAddends(random: RandomSource, maxAnswer: number): [number, number] {
   const cappedMaxAnswer = Math.max(20, Math.min(maxAnswer, 99));
-  const tensTotal = randomInt(random, 2, Math.max(2, Math.min(9, Math.floor(cappedMaxAnswer / 10))));
-  const leftTens = randomInt(random, 1, tensTotal - 1);
-  const rightTens = tensTotal - leftTens;
-  const maxOnesTotal = Math.min(9, cappedMaxAnswer - tensTotal * 10);
-  const onesTotal = randomInt(random, 0, maxOnesTotal);
-  const leftOnes = randomInt(random, 0, onesTotal);
-  const rightOnes = onesTotal - leftOnes;
-  return [leftTens * 10 + leftOnes, rightTens * 10 + rightOnes];
+  const requireTwoDigitAddends = cappedMaxAnswer >= 30;
+  const minAnswer = requireTwoDigitAddends ? 20 : 10;
+  for (let attempt = 0; attempt < 32; attempt += 1) {
+    const answer = randomInt(random, minAnswer, cappedMaxAnswer);
+    const tensTotal = Math.floor(answer / 10);
+    const onesTotal = answer % 10;
+    const leftTens = requireTwoDigitAddends
+      ? randomInt(random, 1, tensTotal - 1)
+      : randomInt(random, 0, tensTotal);
+    const rightTens = tensTotal - leftTens;
+    const leftOnes = randomInt(random, 0, onesTotal);
+    const rightOnes = onesTotal - leftOnes;
+    const left = leftTens * 10 + leftOnes;
+    const right = rightTens * 10 + rightOnes;
+    const usableLowCapFact = left > 0 && right > 0 && (left >= 10 || right >= 10);
+    if (requireTwoDigitAddends ? left >= 10 && right >= 10 : usableLowCapFact) {
+      return [left, right];
+    }
+  }
+  return requireTwoDigitAddends ? [10, 10] : [10, randomInt(random, 1, Math.min(9, cappedMaxAnswer - 10))];
 }
 
 function twoDigitNoRegroupingSubtraction(random: RandomSource, maxAnswer: number): [number, number] {
-  const left = randomInt(random, 20, Math.min(maxAnswer, 99));
+  const left = randomInt(random, 10, Math.max(20, Math.min(maxAnswer, 99)));
   const leftTens = Math.floor(left / 10);
   const leftOnes = left % 10;
   const rightTens = randomInt(random, 0, Math.max(0, leftTens - 1));

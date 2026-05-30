@@ -5,7 +5,7 @@ import { getActiveReward, hideRewardMediaId, REVEAL_PIECES, restoreRewardMediaId
 import { REWARD_MEDIA } from "./rewardMedia";
 import { normalizeHiddenRewardMediaIds, normalizeRewardThemeId, REWARD_THEMES, rewardThemeById } from "./rewardThemes";
 import { DEFAULT_SAVE, canUseStorage, getLastLoadSaveStatus, loadSave, pathProgressKeyFor, resetSave, saveGame } from "./save";
-import { bestSavedPathProgress, createSessionState, evaluateAnswer, markHelpUsed, pathProgressKey, removeSavedPathProgress, toPathProgress } from "./sessionFlow";
+import { advanceSession, bestSavedPathProgress, createSessionState, evaluateAnswer, markHelpUsed, pathProgressKey, removeSavedPathProgress, toPathProgress } from "./sessionFlow";
 import { TEACHING_AIDS, teachingAidForPrompt, teachingAidStepMedia } from "./teachingAids";
 import { teachingAidStepAudioSrc, validateTeachingAidAudioManifest } from "./teachingAidAudio";
 import teachingManifestData from "./teachingAidAudioManifest.json";
@@ -64,6 +64,98 @@ describe("Math Rewards engine", () => {
     expect(first.metadata.answer).toBe((first.metadata.left ?? 0) + (first.metadata.right ?? 0));
     expect(first.metadata.answer).toBeLessThanOrEqual(20);
     expect(validateAnswer(first, first.metadata.answer)).toBe(true);
+  });
+
+  it("avoids repeating an addition fact when the prompt index changes", () => {
+    const settings = normalizeSettings({ gradeLane: "grade1", maxAddend: 10, maxAnswer: 20 });
+    const first = generatePrompt({ path: "add", settings, promptIndex: 0, random: createSeededRandom(12) });
+    const next = generatePrompt({
+      path: "add",
+      settings,
+      promptIndex: 1,
+      random: createSeededRandom(12),
+      recentPromptIds: [first.id]
+    });
+
+    expect(String(next.metadata.left) + "+" + String(next.metadata.right)).not.toBe(String(first.metadata.left) + "+" + String(first.metadata.right));
+  });
+
+  it("keeps low-cap second grade addition from collapsing to one repeated problem", () => {
+    const settings = normalizeSettings({
+      gradeLane: "grade2",
+      enabledOperations: ["add"],
+      maxAnswer: 20,
+      sessionLength: 5,
+      allowRegrouping: false
+    });
+    let session = createSessionState({ path: "add", settings, savedProgress: null, seed: 123 });
+    const questions = [session.currentPrompt.question];
+
+    for (let index = 1; index < settings.sessionLength; index += 1) {
+      session = advanceSession({
+        ...session,
+        answeredPromptIds: [...session.answeredPromptIds, session.currentPrompt.id]
+      }, settings);
+      questions.push(session.currentPrompt.question);
+      const left = session.currentPrompt.metadata.left ?? 0;
+      const right = session.currentPrompt.metadata.right ?? 0;
+      expect(left + right).toBeLessThanOrEqual(20);
+      expect((left % 10) + (right % 10)).toBeLessThanOrEqual(9);
+    }
+
+    expect(new Set(questions).size).toBeGreaterThan(3);
+    expect(new Set(questions)).not.toEqual(new Set(["10 + 10 = ?"]));
+  });
+
+  it("keeps low-cap second grade subtraction varied", () => {
+    const settings = normalizeSettings({
+      gradeLane: "grade2",
+      enabledOperations: ["subtract"],
+      maxAnswer: 20,
+      sessionLength: 5,
+      allowRegrouping: false
+    });
+    let session = createSessionState({ path: "subtract", settings, savedProgress: null, seed: 456 });
+    const questions = [session.currentPrompt.question];
+
+    for (let index = 1; index < settings.sessionLength; index += 1) {
+      session = advanceSession({
+        ...session,
+        answeredPromptIds: [...session.answeredPromptIds, session.currentPrompt.id]
+      }, settings);
+      questions.push(session.currentPrompt.question);
+      const left = session.currentPrompt.metadata.left ?? 0;
+      const right = session.currentPrompt.metadata.right ?? 0;
+      expect(left - right).toBeGreaterThanOrEqual(0);
+      expect(left - right).toBeLessThanOrEqual(20);
+      expect(left % 10).toBeGreaterThanOrEqual(right % 10);
+    }
+
+    expect(new Set(questions).size).toBeGreaterThan(3);
+  });
+
+  it("avoids immediate repeats when a small prompt space is exhausted", () => {
+    const settings = normalizeSettings({
+      gradeLane: "kindergarten",
+      enabledOperations: ["count"],
+      maxAnswer: 5,
+      sessionLength: 10
+    });
+    let session = createSessionState({ path: "count", settings, savedProgress: null, seed: 789 });
+    const questions = [session.currentPrompt.question + " " + String(session.currentPrompt.metadata.answer)];
+
+    for (let index = 1; index < settings.sessionLength; index += 1) {
+      session = advanceSession({
+        ...session,
+        answeredPromptIds: [...session.answeredPromptIds, session.currentPrompt.id]
+      }, settings);
+      questions.push(session.currentPrompt.question + " " + String(session.currentPrompt.metadata.answer));
+    }
+
+    expect(new Set(questions).size).toBe(5);
+    for (let index = 1; index < questions.length; index += 1) {
+      expect(questions[index]).not.toBe(questions[index - 1]);
+    }
   });
 
   it("keeps instruction audio manifest valid", () => {
