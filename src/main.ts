@@ -41,7 +41,7 @@ const GRADE_CHOICES: Array<[GradeLane, string]> = [
   ["grade4", "Fourth grade"]
 ];
 
-type Screen = "launcher" | "play" | "summary";
+type Screen = "launcher" | "play" | "reward" | "summary";
 let persistenceWarning = !canUseStorage(window.localStorage);
 let save: MathSave = loadSave(window.localStorage);
 let saveLoadStatus: SaveLoadStatus = getLastLoadSaveStatus();
@@ -115,17 +115,22 @@ function createShell(): HTMLElement {
   status.append(settingsButton);
   topbar.append(title, status);
 
-  const layout = el("div", "game-layout");
+  const layout = el("div", screen === "reward" ? "game-layout reward-layout" : "game-layout");
   const play = el("section", "play-panel");
   if (screen === "play" && session) {
     play.append(createPlayView(session));
+  } else if (screen === "reward" && session) {
+    play.append(createRewardRevealView(session));
   } else if (screen === "summary" && session) {
     play.append(createSummaryView(session));
   } else {
     play.append(createLauncher());
   }
 
-  layout.append(play, createRewardPanel());
+  layout.append(play);
+  if (screen !== "reward") {
+    layout.append(createRewardPanel());
+  }
   shell.append(topbar);
   if (persistenceWarning) {
     shell.append(el("p", "storage-warning", "Progress is available for this visit, but this browser is not allowing saved progress."));
@@ -267,6 +272,48 @@ function createSummaryView(current: SessionState): HTMLElement {
   return wrapper;
 }
 
+function createRewardRevealView(current: SessionState): HTMLElement {
+  const reward = getActiveReward(save.revealedPieces);
+  const wrapper = el("article", "reward-card");
+  appendConfettiOnce(wrapper);
+  wrapper.append(el("p", "eyebrow", "Reward unlocked"));
+  wrapper.append(el("h2", "", reward.media.title));
+  const showcase = el("div", "reward-showcase");
+  showcase.append(createRewardMedia(reward.media, true));
+  wrapper.append(showcase);
+  wrapper.append(createRewardAttribution(reward.media));
+  if (rewardThemeStatus) {
+    wrapper.append(el("p", "reward-attribution", rewardThemeStatus));
+  }
+
+  const actions = el("div", "summary-actions");
+  if (current.correct >= save.settings.sessionLength) {
+    const replay = commandButton("Replay", "primary-action", "reset", "Replay path");
+    replay.addEventListener("click", () => startSession(current.path));
+    const another = commandButton("Path", "secondary-action", "path", "Choose path");
+    another.addEventListener("click", () => {
+      screen = "launcher";
+      feedback = "Pick a path to start.";
+      render();
+    });
+    const keepGoing = commandButton("Keep going", "secondary-action", "next");
+    keepGoing.addEventListener("click", () => startSession("mix"));
+    actions.append(replay, another, keepGoing);
+  } else {
+    const next = commandButton("Next problem", "primary-action", "next");
+    next.addEventListener("click", () => {
+      screen = "play";
+      feedback = "Solve the next problem.";
+      render();
+    });
+    const another = commandButton("Path", "secondary-action", "path", "Choose path");
+    another.addEventListener("click", returnToLauncher);
+    actions.append(next, another);
+  }
+  wrapper.append(actions);
+  return wrapper;
+}
+
 function createRewardPanel(): HTMLElement {
   const reward = getActiveReward(save.revealedPieces);
   const panel = el("aside", "reward-panel");
@@ -309,6 +356,7 @@ function createRewardMedia(media: RewardMedia, fullyRevealed: boolean): HTMLElem
     video.loop = true;
     video.playsInline = true;
     video.autoplay = fullyRevealed;
+    video.controls = fullyRevealed;
     video.preload = fullyRevealed ? "auto" : "metadata";
     video.setAttribute("aria-label", media.title);
     return video;
@@ -478,7 +526,7 @@ function startSession(path: PathId): void {
 }
 
 function answerPrompt(answer: AnswerValue): void {
-  if (!session) {
+  if (!session || screen !== "play") {
     return;
   }
   const result = evaluateAnswer({
@@ -516,6 +564,7 @@ function answerPrompt(answer: AnswerValue): void {
     bestStreak: result.bestStreak
   };
   feedback = result.feedback;
+  const unlockedReward = result.lastRewardPiece === REVEAL_PIECES - 1;
 
   if (result.completedSession) {
     save = {
@@ -524,7 +573,7 @@ function answerPrompt(answer: AnswerValue): void {
       pathProgress: removeSavedPathProgress(save.pathProgress, session, save.settings)
     };
     persistSave();
-    screen = "summary";
+    screen = unlockedReward ? "reward" : "summary";
     feedback = "Session complete.";
     render();
     return;
@@ -538,6 +587,10 @@ function answerPrompt(answer: AnswerValue): void {
     }
   };
   persistSave();
+  if (unlockedReward) {
+    screen = "reward";
+    feedback = "Reward unlocked.";
+  }
   render();
 }
 

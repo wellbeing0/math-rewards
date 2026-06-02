@@ -429,6 +429,42 @@ test("reward media wraps through the bundled public video after a full reveal", 
   await expect(page.locator(".reward-media")).toHaveAttribute("src", /pexels-kitten-01-12596743\.mp4/);
 });
 
+test("final reward reveal takes over the play area until the child continues", async ({ page }) => {
+  await page.addInitScript((key) => {
+    window.localStorage.setItem(key, JSON.stringify({
+      version: 2,
+      completedPrompts: 9,
+      completedSessions: 1,
+      revealedPieces: 9,
+      bestStreak: 5,
+      settings: {
+        gradeLane: "grade1",
+        enabledOperations: ["add", "subtract"],
+        maxAddend: 10,
+        maxAnswer: 20,
+        sessionLength: 3,
+        reducedMotion: false,
+        allowRegrouping: false,
+        enableFractions: false,
+        enableDecimals: false
+      }
+    }));
+  }, saveKey);
+
+  await page.goto("/");
+  await page.getByRole("button", { name: /Add/ }).tap();
+  await answerCurrentPrompt(page);
+
+  await expect(page.getByText("Reward unlocked")).toBeVisible();
+  await expect(page.locator(".reward-showcase .reward-media")).toHaveAttribute("src", /pexels-kitten-01-12596743\.mp4/);
+  await expect(page.locator(".question")).toHaveCount(0);
+  await expect(page.locator(".reward-panel")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Next problem" }).tap();
+  await expect(page.locator(".question")).toBeVisible();
+  await expect(page.locator(".reveal-board")).toHaveAttribute("aria-label", "10 of 10 video pieces revealed");
+});
+
 test("adult settings stay separated and can switch to kindergarten counting", async ({ page }) => {
   await page.goto("/");
 
