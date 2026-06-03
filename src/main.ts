@@ -356,7 +356,7 @@ function createRewardMedia(media: RewardMedia, fullyRevealed: boolean): HTMLElem
     video.loop = true;
     video.playsInline = true;
     video.autoplay = fullyRevealed;
-    video.controls = fullyRevealed;
+    video.controls = false;
     video.preload = fullyRevealed ? "auto" : "metadata";
     video.setAttribute("aria-label", media.title);
     return video;

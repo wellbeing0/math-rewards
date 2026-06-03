@@ -456,7 +456,12 @@ test("final reward reveal takes over the play area until the child continues", a
   await answerCurrentPrompt(page);
 
   await expect(page.getByText("Reward unlocked")).toBeVisible();
-  await expect(page.locator(".reward-showcase .reward-media")).toHaveAttribute("src", /pexels-kitten-01-12596743\.mp4/);
+  const rewardVideo = page.locator(".reward-showcase .reward-media");
+  await expect(rewardVideo).toHaveAttribute("src", /pexels-kitten-01-12596743\.mp4/);
+  await expect(rewardVideo).toHaveJSProperty("controls", false);
+  await expect(rewardVideo).toHaveJSProperty("muted", true);
+  await expect(rewardVideo).toHaveJSProperty("loop", true);
+  await expect(rewardVideo).toHaveJSProperty("autoplay", true);
   await expect(page.locator(".question")).toHaveCount(0);
   await expect(page.locator(".reward-panel")).toHaveCount(0);
 
